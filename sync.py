@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -6,7 +7,8 @@ from enum import Enum
 from aw_client import ActivityWatchClient
 from aw_core.models import Event
 from dotenv import load_dotenv
-from garminconnect import Garmin
+from garminconnect import Garmin  # type: ignore[reportMissingTypeStubs]
+from typing import TypedDict, List, Dict
 
 
 class SleepLevelType(Enum):
@@ -55,26 +57,32 @@ def sync_sleep_data(api: Garmin, awc: ActivityWatchClient, date: str) -> list[Ev
     return events
 
 
+class AllDayEvent(TypedDict, total=False):
+    startTimestampGMT: str
+    endTimestampGMT: str
+    duration: int  # minutes
+    activityType: str
+
+
 def sync_workout_data(api: Garmin, awc: ActivityWatchClient, date: str) -> list[Event]:
     """Sync workout/activity data from Garmin to ActivityWatch"""
-    all_day_events = api.get_all_day_events(date)
+    all_day_events: List[AllDayEvent] = api.get_all_day_events(date)  # type: ignore[assignment]
 
     events: list[Event] = []
     for activity in all_day_events:
         # Parse the start time
-        start_time = datetime.strptime(
-            activity["startTimestampGMT"], "%Y-%m-%dT%H:%M:%S.0"
-        )
-        duration_seconds: int = (
-            activity.get("duration", 0) * 60
-        )  # Duration is in minutes
+        start_str = str(activity.get("startTimestampGMT", "1970-01-01T00:00:00.0"))
+        start_time = datetime.strptime(start_str, "%Y-%m-%dT%H:%M:%S.0")
+        # Duration is in minutes; convert to seconds
+        duration_minutes = int(activity.get("duration", 0) or 0)
+        duration_seconds: int = duration_minutes * 60
 
         # Extract activity data
-        activity_type: str = activity.get("activityType", "activity").title()
-        workout_data = {
+        activity_type: str = str(activity.get("activityType", "activity")).title()
+        workout_data: Dict[str, object] = {
             "title": f"Activity: {activity_type}",
             "type": activity.get("activityType", "unknown"),
-            "duration_minutes": activity.get("duration", 0),
+            "duration_minutes": duration_minutes,
         }
 
         # Remove None values
@@ -142,8 +150,9 @@ def sync_garmin_data(
 
 
 if __name__ == "__main__":
-    # Load environment variables from .env file
-    load_dotenv()
+    # Load environment variables from .env file located next to this script
+    # This makes cron/systemd execution independent of the current working directory.
+    load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
     email = os.getenv("GARMIN_EMAIL")
     password = os.getenv("GARMIN_PASSWORD")
