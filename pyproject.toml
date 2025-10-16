@@ -1,0 +1,16 @@
+[project]
+name = "aw-garmin"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aw-client>=0.5.15",
+    "garminconnect>=0.2.30",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.0.1",
+]
